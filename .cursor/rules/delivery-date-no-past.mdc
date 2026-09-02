@@ -1,0 +1,41 @@
+---
+description: Fechas de entrega/recolección — nunca en el pasado; iOS ignora min=; validar UI + API
+alwaysApply: true
+---
+
+# Fechas de entrega / recolección
+
+Calendarios o date pickers de **entrega**, **recolección**, **fulfillment** o ventanas de pedido **no pueden aceptar fechas en el pasado** (ni anteriores al mínimo de negocio del día).
+
+## Regla de negocio
+
+- Zona horaria de corte: **America/Mexico_City**.
+- Reusar helpers existentes; no reinventar:
+  - Frontend: `earliestFulfillmentDate` en `frontend/src/lib/shopFulfillment.ts`
+  - Backend: `earliest_fulfillment_date` / `validate_fulfillment_date` en `backend/api/shop_fulfillment.py`
+- Mismo día permitido solo **antes** del corte (delivery 12:00 / pickup 16:00 CDMX); si ya pasó el corte → mínimo = mañana.
+
+## Defensa en profundidad (obligatorio)
+
+1. **UI calendario** — días &lt; earliest **deshabilitados** (no clicables, estilo muted). En iOS Safari, `input[type=date]` + `min` **no** apaga días del wheel: usar calendario propio (`FulfillmentDateField`) u otro picker que soporte `minDate` visual.
+2. **UI clamp** — si de algún modo llega `value < earliest`, forzar earliest + mensaje en español.
+3. **Submit** — rechazar si la fecha &lt; earliest antes de llamar API.
+4. **API** — validar de nuevo con `validate_fulfillment_date` (o equivalente); 422 con `detail` claro. Nunca confiar solo en el cliente.
+
+## Ejemplo (frontend)
+
+```tsx
+<FulfillmentDateField
+  label="Fecha de entrega"
+  value={date}
+  minDate={earliestFulfillmentDate(fulfillment)}
+  onChange={setDate}
+/>
+```
+
+## Antipatrones
+
+- ❌ Solo `min` / `minDate` del `type="date"` nativo (iOS sigue mostrando días pasados activos)
+- ❌ Validar solo en frontend
+- ❌ Usar `new Date()` local del browser como “hoy” de negocio sin CDMX
+- ❌ Librería pesada solo para esto si `FulfillmentDateField` basta

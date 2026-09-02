@@ -1,0 +1,88 @@
+---
+description: Database conventions — Supabase, migrations, RLS, RPC, money, schema naming
+globs: supabase/**/*,**/*.sql
+alwaysApply: false
+---
+
+# Database Conventions
+
+**Supabase Postgres** is the system of record. Schema evolves only through committed files in `supabase/migrations/`.
+
+## Schema organization
+
+- App tables live in a **dedicated schema** named after the product, lowercase (`<app>`), not `public`.
+- Expose that schema in Supabase Dashboard → Settings → API → Exposed schemas.
+- One migration directory: `supabase/migrations/`.
+- There is **no** live `backend/supabase_schema.sql`. Do not revive a second baseline.
+
+**Naming:** see `naming.mdc`.
+
+## Tables (commerce + staff)
+
+| Table | Purpose |
+|-------|---------|
+| `<app>.profiles` | `id` (auth user), `email`, `role`, timestamps |
+| `<app>.catalog_products` | `id` (slug), `category`, `name`, `description`, `price_pesos`, `pos_only`, `active`, `featured`, `image_key`, `sort_order` |
+| `<app>.catalog_categories` | category id, label, `sort_order` |
+| `<app>.pos_sales` | `staff_user_id`, `payment_method`, deferred fields, `total_pesos` |
+| `<app>.pos_sale_lines` | `sale_id`, `line_index`, `product_id`, `product_name`, `quantity`, `unit_price_pesos` |
+| `<app>.shop_orders` / lines | online checkout (Stripe) when the shop has it |
+
+No `idempotency_keys` table.
+
+API and catalog routes expect `image_key` / `sort_order` on `catalog_products`. Keep those columns in schema when touching catalog SQL.
+
+## Money
+
+- `INTEGER` columns: `price_pesos`, `unit_price_pesos`, `total_pesos`.
+- Unit: **whole Mexican pesos** (no centavos in DB). Stripe uses cents at the payment boundary only (`* 100`).
+- Never `NUMERIC`/`FLOAT` for money in new columns.
+
+## Migrations
+
+```text
+supabase/migrations/
+├── 000001_app_schema.sql
+├── 000002_catalog_seed.sql
+└── 00000N_*.sql
+```
+
+Rules:
+
+- **Forward-only** in production — write a new migration to undo, don't edit applied files.
+- Idempotent guards where safe: `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`.
+- Include RLS `ENABLE` + `FORCE` in the same migration as `CREATE TABLE`.
+- Catalog/content seeds may live in numbered migrations (`000002`, `000010`, …), not a separate `scripts/seed_catalog.py`.
+
+## Row Level Security
+
+```sql
+ALTER TABLE <app>.<table> ENABLE ROW LEVEL SECURITY;
+ALTER TABLE <app>.<table> FORCE ROW LEVEL SECURITY;
+```
+
+**API-only:** no policies for `anon` / `authenticated`. Backend uses `service_role`.
+
+## RPC functions
+
+- `SECURITY DEFINER`, `SET search_path = <app>`.
+- `GRANT EXECUTE` to `service_role`.
+- `<app>.create_pos_sale(...)` — catalog prices from `catalog_products`; venta libre uses `unit_price_pesos` in the JSON payload.
+
+## SDK access from API
+
+```python
+client.schema("<app>").table("pos_sales").select("...")
+```
+
+Always pass `Content-Profile: <app>` (and `Accept-Profile: <app>` as needed) on PostgREST RPC HTTP calls.
+
+## Anti-patterns
+
+- ❌ `product_ts` or ambiguous column names
+- ❌ Tables in `public` duplicating `<app>`
+- ❌ RLS disabled on exposed tables
+- ❌ Policies that allow `anon` read on sales
+- ❌ Multi-step writes from API without RPC when the operation must be atomic
+- ❌ Storing only a public image URL without `image_key` for R2 delete/list
+- ❌ Applying SQL only in dashboard without a repo migration

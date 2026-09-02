@@ -1,0 +1,57 @@
+---
+description: Testing strategy — Vitest, pytest, what is actually gated
+globs: "**/*.{test,spec}.{ts,tsx,py},**/tests/**"
+alwaysApply: false
+---
+
+# Testing
+
+Tests cover helpers, theme/dialog audits, catalog/shop guards. There is **no** CI workflow, **no** Playwright, **no** `packages/shared`, **no** coverage gate.
+
+## What exists
+
+| Layer | Tool | Location |
+|-------|------|----------|
+| Web helpers / theme | Vitest | `frontend/src/lib/*.test.ts` (colocated) |
+| API unit (pure Python) | pytest | `backend/tests/` |
+| Lint | ESLint | Husky pre-commit → frontend |
+| Types | `tsc -b` | `frontend` `npm run build` |
+
+Frontend tests today: `muiTheme`, `dialogFormFields.audit`, `phoneInput`, `catalogPriceInput`, `posTabSearch`, `shopBottomNav`.
+
+Backend tests today: catalog active/categories/price bounds, shop checkout guards, phone digits.
+
+## Commands
+
+```bash
+# web
+cd frontend && npm test          # vitest run
+cd frontend && npm run lint
+
+# api
+cd backend && pytest
+
+# monorepo hook (from repo root)
+npm run eslint                   # → npm run lint --prefix frontend
+```
+
+No root `test` / `e2e` scripts. No `apps/web` workspaces.
+
+## Required when touching those areas
+
+- Money / catalog price helpers: keep or extend colocated Vitest.
+- Checkout rate-limit / Stripe paid gates: keep `backend/tests/test_shop_checkout_guards.py`.
+- MUI dialog + outlined labels: `muiTheme.test.ts` + `dialogFormFields.audit.test.ts` must stay green (`npm test` in `frontend/`).
+- Auth JWT / POS sale RPC: **no automated suite yet** — do not claim one. Manual smoke: `security-smoke-tests.mdc`.
+
+## Mocking
+
+- Unit tests: no live Supabase in `backend/tests/` (pure functions).
+- `backend/test_db_connection.py` is a **manual** smoke, not PR-blocking.
+
+## Anti-patterns
+
+- ❌ `git commit --no-verify` to skip Husky
+- ❌ Tests that hit production Supabase or API
+- ❌ Adding Playwright / coverage % / GitHub Actions unless asked
+- ❌ Inventing `posReducer` / idempotency tests for code that does not exist

@@ -1,0 +1,72 @@
+---
+description: Documentation standards — README, env catalog, migrations, API docs
+alwaysApply: true
+---
+
+# Documentation Standards
+
+Docs live in the repo and stay accurate after every architectural change. **No orphan Markdown** — don't create summary/changelog files unless explicitly requested.
+
+## Required documents
+
+| Document | Location | Audience |
+|----------|----------|----------|
+| Project README | `README.md` (root) | everyone |
+| Env templates | `frontend/.env.example`, `backend/.env.example` | developers |
+| Migrations guide | `supabase/README.md` | developers + deploy |
+| API reference | FastAPI `/docs` | developers |
+
+There is **no** root `.env.example`, **no** `apps/*/.env.example`, **no** `docs/runbooks/`, **no** `packages/shared`.
+
+## Root README must include
+
+1. **What** the product does (2–3 sentences).
+2. **Stack** — React, Vite, FastAPI, Supabase.
+3. **Repo structure** — `frontend/`, `backend/`, `supabase/migrations/`.
+4. **Prerequisites** — Node LTS, Python 3.12, Supabase project.
+5. **Local dev** — ordered steps (install, env, run web + api).
+6. **Environment variables** using the names that exist:
+
+| Variable | App | Required | Description |
+|----------|-----|----------|-------------|
+| `VITE_BACKEND_URL` | frontend | prod yes | Public FastAPI base URL (empty in local Vite proxy) |
+| `VITE_SUPABASE_URL` | frontend | yes | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | backend | yes | Server only — never web |
+
+7. **Deploy** — two Vercel projects; Preview vs Production env parity.
+8. **Quality** — `npm run eslint` (root) / `npm run lint` (frontend), `npm test` in `frontend/`, `pytest` in `backend/`.
+9. **Database** — apply `supabase/migrations/` in order; link `supabase/README.md`.
+
+Update README in the **same change** that alters structure, env names, or deploy steps.
+
+## `supabase/README.md`
+
+- How to apply migrations (SQL Editor) if CLI not used.
+- Post-migration: expose app schema (lowercase product name), verify RLS, smoke `/api/health`.
+
+## `.env.example` files
+
+Placeholders only. Comment which Vercel project (frontend vs backend) and build-time vs runtime.
+
+Frontend: `VITE_SUPABASE_*`, `VITE_BACKEND_URL`, staff emails, optional `VITE_SHOP_WHATSAPP_PHONE`.
+
+Backend: `SUPABASE_*`, `R2_*`, Stripe, `CORS_EXTRA_ORIGINS`, shop public URL.
+
+## Code documentation
+
+- **Don't** document what code already says.
+- **Do** document: RPC invariants, payment method rules, schema exposure, venta libre price exception.
+- SQL migrations: header comment with purpose and rollback.
+
+## Cursor / AI rules
+
+- `.cursor/rules/` describe **this repo as it is**. Granular files (`frontend-tooling.mdc`, etc.) supplement; if they conflict with code, **update the rule** (or the code in a separate, requested change).
+- Do not leave silent drift between constitution (`architecture.mdc`) and `frontend/` + `backend/`.
+
+## Anti-patterns
+
+- ❌ README claiming Node API or `apps/web` layout
+- ❌ Secret values in README or committed `.env`
+- ❌ Migration only in Supabase dashboard — not in git
+- ❌ Auto-generated summary `.md` files after every task
+- ❌ Stale env names (`REACT_APP_*`, `VITE_API_URL` as if it were wired)

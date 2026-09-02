@@ -1,0 +1,135 @@
+---
+description: API conventions — REST design, errors, pagination, auth headers
+globs: backend/api/**/*.py,frontend/src/lib/*Api.ts,frontend/src/lib/apiClient.ts
+alwaysApply: false
+---
+
+# API Conventions
+
+REST JSON API under `/api`. OpenAPI at `/docs` (FastAPI). No `packages/shared` Zod — Pydantic models are the contract.
+
+## URL structure
+
+```text
+GET  /api/health
+GET  /api/me
+GET  /api/catalog/products
+GET  /api/catalog/files/{key...}
+GET  /api/pos/sales?page=&pageSize=
+POST /api/pos/sales
+GET/POST /api/shop/...
+POST /api/webhooks/...
+```
+
+- Nouns for resources; HTTP verbs express action.
+- No verbs in paths (`/api/createSale` ❌).
+- No `/api/v1` prefix.
+
+## Authentication
+
+```http
+Authorization: Bearer <supabase_access_token>
+```
+
+- 401: missing, malformed, expired token.
+- 403: valid token, role insufficient.
+- Public routes (`/health`, `/catalog/products`, shop catalog/config) — no Bearer required.
+
+## Request / response shape
+
+**Input** — Pydantic; camelCase aliases.
+
+**Sale create:**
+
+```json
+{
+  "paymentMethod": "efectivo",
+  "deferredContact": { "fullName": "...", "phone": "..." },
+  "lines": [
+    { "productId": "ramo-aurora", "name": "...", "quantity": 2 },
+    { "productId": "libre-varios", "name": "...", "quantity": 1, "unitPrice": 150 }
+  ]
+}
+```
+
+`unitPrice` **optional**. Server ignores it for catalog products. Required in practice only for venta libre (`libre-varios`).
+
+**Sale list response:** offset page, not cursor:
+
+```json
+{
+  "items": [...],
+  "total": 42,
+  "page": 1,
+  "pageSize": 10
+}
+```
+
+Sale item includes `id`, `createdAt`, `paymentMethod`, `deferredContact`, `lines` (`productId`, `name`, `quantity`, `unitPrice`), `total`.
+
+## HTTP status codes
+
+| Situation | Status |
+|-----------|--------|
+| Success GET | 200 |
+| Success POST create | 200 |
+| Validation error | 422 |
+| Unauthorized | 401 |
+| Forbidden | 403 |
+| Not found | 404 |
+| Rate limited (shop checkout) | 429 |
+| DB / upstream unavailable | 503 |
+| Unexpected server bug | 500 (logged with trace) |
+
+Never 200 with `{ ok: false }` except `/api/health` which uses **503** + `{ ok: false, detail }` when DB is down. Healthy health is `{ ok: true, ... }`.
+
+## Error body
+
+FastAPI: `{ "detail": "string" }` or `{ "detail": [{ "msg": "..." }] }`.
+
+Frontend `apiClient` parses `detail` string and Pydantic array.
+
+## Pagination
+
+POS sales: `page` (1-based) + `pageSize` (default 10, max 100). Response: `items`, `total`, `page`, `pageSize`.
+
+Not cursor-based.
+
+## Idempotency
+
+**Not implemented.** Vercel CORS allows `Idempotency-Key` header; handlers ignore it. Do not document it as required.
+
+## Caching headers
+
+| Endpoint | Cache-Control |
+|----------|---------------|
+| `GET /catalog/files/*` | `public, max-age=86400` |
+| `GET /pos/sales` | no explicit cache header (private by auth) |
+
+Catalog product JSON is not given `stale-while-revalidate`.
+
+## Client helper
+
+`frontend/src/lib/apiClient.ts` — `ApiHttpError`, `apiFetch`, `handleApiJsonError`, `fetchJson`. Domain `*Api.ts` wrap it. Token via `Authorization` header and/or `withAccessToken()`.
+
+## `/api/me` response
+
+```json
+{
+  "userId": "uuid",
+  "email": "staff@example.com",
+  "role": "empleado",
+  "canAccessPos": true
+}
+```
+
+No `isAdmin` field — frontend derives `isAdmin` from `role === "admin"`.
+
+## Anti-patterns
+
+- ❌ Client `unitPrice` trusted for catalog SKUs
+- ❌ Unbounded list endpoints
+- ❌ Mixed camelCase / snake_case in JSON
+- ❌ 500 for validation mistakes (use 422)
+- ❌ Exposing stack traces in `detail`
+- ❌ Claiming cursor pagination or Idempotency-Key behavior that is not in code

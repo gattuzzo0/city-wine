@@ -1,0 +1,109 @@
+---
+description: Backend — FastAPI, layers, Supabase, Vercel Python, logging
+globs: backend/**/*.py
+alwaysApply: false
+---
+
+# Backend
+
+**Stack:** Python 3.12 + **FastAPI** in `backend/`, deployed with `@vercel/python`. Not Node/Fastify.
+
+## Layout
+
+```
+backend/
+├── server.py              # FastAPI app, CORS, include /api
+├── api/
+│   ├── router.py          # /health, /me, mount routers
+│   ├── config.py          # cached env getters
+│   ├── settings.py        # non-secret ops constants (CORS origins, cutoffs)
+│   ├── auth_jwt.py
+│   ├── deps.py            # require_pos_staff, require_admin
+│   ├── supabase_client.py
+│   ├── r2_storage.py
+│   ├── *_routes.py        # catalog, pos, shop, stripe webhooks
+│   └── shop_fulfillment.py / shop_checkout_guards.py / catalog_active.py
+├── tests/
+├── requirements.txt
+├── .python-version        # 3.12
+└── vercel.json
+```
+
+Schema SQL lives in **`supabase/migrations/`**, not `backend/supabase_schema.sql`.
+
+## Entry responsibilities
+
+- Mount all routes under `/api`.
+- CORS: `get_cors_allowed_origins()` (fixed list in `settings.py` + `CORS_EXTRA_ORIGINS`) + `allow_origin_regex` for `*.vercel.app`.
+- `allow_credentials: true` — never `allow_origins=["*"]` with Authorization.
+- Root `GET /` returns `{ service: "<app>-api", docs, corsProfile }`.
+
+## Vercel (`vercel.json`)
+
+- `builds` + `routes` to `server.py` (**not** `rewrites`).
+- **`headers` block** for CORS preflight — Vercel intercepts OPTIONS before Python.
+- Production origin in headers: `https://<frontend-prod-domain>`. FastAPI middleware covers localhost + previews.
+
+## Config
+
+- All env access through `api/config.py` (`lru_cache` getters). Ops constants in `api/settings.py`.
+- Accept alias env names (`SUPABASE_URL`, `supabase_SUPABASE_URL`).
+- Load `.env` then `.env.local` with `override=False` so local `.env` wins over CLI leftovers.
+- `is_database_configured()` → 503, never opaque 500.
+
+## Supabase client
+
+- Singleton **service_role** in server only.
+- **Always** `.schema("<app>")` — tables are not in `public`.
+- SDK calls from `async` handlers: `asyncio.to_thread`.
+- Scalar RPC: `httpx` to PostgREST with `Content-Profile: <app>` when the SDK breaks on scalar UUID.
+
+## Auth
+
+1. `Authorization: Bearer` on protected routes.
+2. JWT: HS256 if `SUPABASE_JWT_SECRET` set → else `GET /auth/v1/user`.
+3. Product role from `<app>.profiles` per request — not JWT claims.
+4. 401 / 403 / 503 as in `backend-supabase-auth.mdc`.
+5. Deps: `require_pos_staff` (admin|empleado), `require_admin`.
+
+## Domain endpoints (what exists)
+
+| Route | Auth | Notes |
+|-------|------|-------|
+| `GET /api/health` | none | ping `<app>.profiles` + catalog |
+| `GET /api/me` | user | `userId`, `email`, `role`, `canAccessPos` |
+| `GET /api/catalog/products` | none | public catalog |
+| `GET /api/catalog/files/{key}` | none | R2 proxy; `Cache-Control: public, max-age=86400` |
+| `GET /api/pos/sales` | staff | **offset pagination** `page` + `pageSize` (default 10, max 100) |
+| `POST /api/pos/sales` | staff | RPC `create_pos_sale`; optional `unitPrice` only for venta libre |
+| `/api/shop/*` | mixed | checkout, Stripe, public shop config |
+| `/api/webhooks/*` | Stripe sig | payment events |
+
+No `Idempotency-Key` handling in code (header is allowed in Vercel CORS only). Rate limit: **shop checkout** (`CheckoutRateLimiter`, 10/min per IP) — not POS sales.
+
+## Sale creation flow
+
+1. Validate body (Pydantic). Catalog lines: no client price.
+2. Resolve catalog prices in `create_pos_sale` RPC; venta libre uses `unitPrice` from client.
+3. Return full sale record.
+
+## Logging
+
+- stdlib `logging`; `logger.exception` in `except`.
+- Re-raise `HTTPException` with `from None`.
+- Log ids (`user_id`, `sale_id`) — never email/phone.
+- No request-id middleware, no JSON/pino formatter.
+
+## Dependencies
+
+`fastapi`, `uvicorn`, `python-dotenv`, `supabase`, `PyJWT[crypto]`, `httpx`, `boto3`, `python-multipart`, `stripe`.
+
+## Anti-patterns
+
+- ❌ Endpoints in `server.py` beyond `GET /`
+- ❌ `os.getenv` scattered outside `config.py`
+- ❌ service_role in frontend bundle
+- ❌ Sync blocking SDK in async handler without `to_thread`
+- ❌ Trusting client `unitPrice` for catalog SKUs
+- ❌ 200 with `{ ok: false }` — use correct HTTP status
+- ❌ Claiming a Fastify/Node rewrite as current stack

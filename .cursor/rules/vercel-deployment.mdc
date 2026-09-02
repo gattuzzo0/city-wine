@@ -1,0 +1,28 @@
+---
+description: Despliegue Vercel — dos proyectos (frontend SPA Vite + backend Python), rewrites y CORS
+alwaysApply: true
+---
+
+# Vercel
+
+## Dos proyectos
+
+- **Frontend** (Vite SPA): proyecto Vercel. Integración Git suele usar **raíz del monorepo** + `vercel.json` en la raíz (`installCommand` / `buildCommand` bajo `frontend/`, `outputDirectory` → `frontend/dist`, SPA rewrites). También existe `frontend/vercel.json` (solo rewrites) por si el Root Directory del dashboard es `frontend/`.
+- **Backend** (FastAPI): proyecto Vercel separado con root en `backend/`, entry `server.py`, runtime `@vercel/python`.
+
+## Backend `vercel.json`
+
+- `builds`: `{ "src": "server.py", "use": "@vercel/python" }`
+- `routes`: todo el tráfico a `server.py` (**no** `rewrites`).
+- `headers` en `/(.*)`: CORS para preflight OPTIONS interceptado por el edge (`Access-Control-Allow-Origin: https://<frontend-prod-domain>`, methods, `Authorization, Content-Type, Idempotency-Key`, credentials). FastAPI `CORSMiddleware` cubre localhost y `*.vercel.app` en requests reales.
+
+## Frontend → Backend
+
+- En build del frontend: **`VITE_BACKEND_URL`** = URL pública del API (sin barra final). Vacío en local (proxy Vite `/api` → `:8000`).
+- Cliente: `apiUrl()` en `frontend/src/lib/apiUrl.ts` — base + `/api/...`.
+- Tras cambiar `VITE_*` en Vercel: **redeploy** (Vite inyecta en build).
+
+## Entorno
+
+- Duplicar en el dashboard las mismas variables que en `.env.example` de cada lado: frontend solo `VITE_*`; backend `SUPABASE_*`, `R2_*`, Stripe, JWT.
+- No commitear `.vercel` con secretos.

@@ -1,0 +1,79 @@
+---
+description: Iconos PWA y favicon — fuente PNG cuadrada, script de escalas, index.html y manifest
+alwaysApply: true
+---
+
+# Iconos de web app (favicon, iOS, Android, PWA)
+
+Patrón genérico para SPAs Vite en este monorepo (`frontend/public/`). **Una sola fuente raster cuadrada** → todas las escalas. No mantener iconos a mano ni asumir que un SVG basta para “Añadir a inicio”.
+
+## Fuente de verdad
+
+| Qué | Dónde (convención) |
+|-----|---------------------|
+| Logo maestro **cuadrado** (PNG, ≥512 px, fondo incluido) | `frontend/src/assets/<app>-app-icon.png` |
+| Script de regeneración | `frontend/scripts/generate_icons.py` (Pillow) |
+| Salidas servidas | `frontend/public/` |
+
+Requisitos del PNG fuente: **1:1**, legible reducido, margen interno si el logo llega al borde (para variantes maskable).
+
+## Archivos que deben existir en `public/`
+
+| Archivo | Tamaño | Uso |
+|---------|--------|-----|
+| `favicon.ico` | 16, 32, 48 | Pestaña navegador |
+| `favicon-16x16.png` | 16×16 | Favicon PNG |
+| `favicon-32x32.png` | 32×32 | Favicon PNG |
+| `favicon.svg` | embebido ~128 px | Navegadores con SVG favicon (raster embebido OK) |
+| `apple-touch-icon.png` | **180×180** | iOS/iPadOS — **Safari no usa SVG** para acceso en inicio |
+| `icon-192.png` | 192×192 | PWA / Android `purpose: any` |
+| `icon-512.png` | 512×512 | PWA `purpose: any` |
+| `icon-512-maskable.png` | 512×512 | PWA `purpose: maskable` — logo ~**82%** centrado sobre `background_color` |
+
+## Regenerar (obligatorio tras cambio de marca)
+
+Desde la raíz del repo (requiere `pip install Pillow` o Pillow ya en entorno):
+
+```powershell
+python frontend/scripts/generate_icons.py
+# o ruta explícita:
+python frontend/scripts/generate_icons.py path/to/nuevo-logo.png
+```
+
+El script debe: redimensionar con LANCZOS, generar `.ico` multi-tamaño, SVG con PNG base64 (128 px, no 512 — evita SVG de cientos de KB), maskable con margen seguro.
+
+**No** commitear solo el PNG fuente sin correr el script: faltan escalas en `public/`.
+
+## `frontend/index.html` (mínimo)
+
+```html
+<link rel="icon" href="/favicon.ico" sizes="any" />
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="manifest" href="/site.webmanifest" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+<meta name="theme-color" content="…" />
+<meta name="apple-mobile-web-app-title" content="…" />
+```
+
+## `site.webmanifest`
+
+- `background_color` y `theme_color` alineados con tokens de marca (`index.css` / MUI theme).
+- `icons`: `icon-192.png` (`any`), `icon-512.png` (`any`), **`icon-512-maskable.png`** (`maskable`) — no reutilizar el 512 sin margen si Android recorta bordes.
+
+## Nuevo proyecto (checklist agente)
+
+1. Colocar PNG cuadrado en `src/assets/…-app-icon.png`.
+2. Copiar/adaptar `scripts/generate_icons.py` (`DEFAULT_SRC`, color de fondo maskable).
+3. Ejecutar script → verificar los 8 archivos en `public/`.
+4. Enlazar en `index.html` + `site.webmanifest`.
+5. Tras deploy: avisar que en móvil puede hacer falta **quitar y volver a añadir** el acceso en inicio (caché de iconos).
+
+## Antipatrones
+
+- ❌ Solo `favicon.svg` vectorial antiguo — iOS y muchas PWA ignoran SVG para instalación.
+- ❌ Un solo PNG 512 sin `.ico`, sin 180, sin maskable.
+- ❌ Regenerar a mano en Figma una escala y olvidar el resto.
+- ❌ `purpose: maskable` con arte edge-to-edge (se recorta en Android).
+- ❌ SVG favicon con base64 de 512 px (infla el repo sin beneficio).

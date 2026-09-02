@@ -1,0 +1,102 @@
+---
+description: Security — auth, RLS, secrets, rate limits, trust boundaries, audit
+alwaysApply: true
+---
+
+# Security
+
+Security is enforced at **API + database**, not in the browser. UI guards are UX only.
+
+## Trust boundaries
+
+| Data / action | Trusted layer |
+|---------------|---------------|
+| Who is logged in | Supabase Auth JWT verified by API |
+| Staff role | `profiles.role` read by API per request |
+| Product prices | Catalog table — **never client body** except venta libre (`libre-varios`) |
+| Sale totals | RPC computed from server-resolved line prices |
+| Binary assets | R2 via API proxy — keys in DB |
+
+## Frontend exposure
+
+- Only **anon key** in `VITE_SUPABASE_ANON_KEY` — public by design.
+- Supabase client in browser: **auth methods only** (`signIn`, `signOut`, `getSession`, `refreshSession`).
+- **No** `supabase.from('profiles')`, **no** `supabase.from('pos_sales')` from browser.
+- Role from `GET /api/me` after session established.
+
+## Backend secrets
+
+| Secret | Location | Never |
+|--------|----------|-------|
+| `SUPABASE_SERVICE_ROLE_KEY` | API env only | frontend, git, logs |
+| `SUPABASE_JWT_SECRET` | API env | frontend |
+| `R2_SECRET_ACCESS_KEY` | API env | frontend |
+| Staff passwords | Supabase Auth only | application tables |
+
+Use `.env.example` with empty placeholders — real values in `.env.local` / Vercel dashboard.
+
+## Row Level Security
+
+Every table in exposed schema (`public` or dedicated app schema):
+
+```sql
+ALTER TABLE <schema>.<table> ENABLE ROW LEVEL SECURITY;
+ALTER TABLE <schema>.<table> FORCE ROW LEVEL SECURITY;
+```
+
+**Default pattern (API-only data):** RLS on, **no policies** for anon/authenticated — blocks PostgREST direct access. Backend uses service_role (bypasses RLS).
+
+Add policies only when browser talks directly to PostgREST for that table (discouraged).
+
+## JWT verification
+
+- `HTTPBearer` with custom 401 messages (not generic auto_error).
+- HS256 with `audience="authenticated"`, `leeway=120` when secret available.
+- Fallback to Supabase Auth API for RS256 / new signing keys.
+- 503 if Supabase URL/key missing during verification — not 500.
+
+## Authorization
+
+- 401: missing/invalid token.
+- 403: valid token, insufficient role.
+- 503: database unavailable.
+- Separate deps per audience: `require_pos_staff`, `require_admin` — don't reuse one dep for all.
+
+## Rate limiting
+
+- Shop **checkout** create: in-memory limiter (`shop_checkout_guards.py`) — 10 calls / 60s per IP → **429**.
+- POS sales: **no** rate limiter in code.
+- Return 429 when the checkout limiter trips.
+
+## Input limits
+
+- Max lines / qty validated in Pydantic + RPC.
+- MIME and size on catalog uploads (~4.5 MB Vercel).
+- **Idempotency-Key is not applied** on `POST /api/pos/sales` (CORS allows the header; handler ignores it).
+
+## CORS
+
+- Explicit allowlist + regex for preview deploys.
+- `allow_credentials: true` — requires concrete origins, not `*`.
+- Vercel Python: edge `headers` in `vercel.json` for OPTIONS preflight.
+
+## Audit
+
+No `audit_log` table. Use `logger.exception` / info with ids (`user_id`, `sale_id`) — never email/phone.
+
+## Supply chain
+
+No GitHub Actions in this repo. Do not claim Dependabot/CI audit as gating. `npm audit` / `pip-audit` stay manual.
+
+## Smoke tests before ship
+
+Mandatory pass/fail checklist + commands: **`security-smoke-tests.mdc`**. Run after auth, RLS, env, or deploy changes.
+
+## Anti-patterns
+
+- ❌ service_role in Vite bundle
+- ❌ RLS disabled on public tables
+- ❌ Role from JWT claim `role` (use `profiles` table)
+- ❌ Client-sent price trusted in RPC for catalog SKUs (venta libre is the documented exception)
+- ❌ Logging emails, phones, tokens, full request bodies
+- ❌ `git commit` of `.env` with real secrets

@@ -1,0 +1,54 @@
+---
+description: Labels flotantes, DialogContent padding y nombres accesibles en formularios
+globs: "frontend/src/**/*.{ts,tsx}"
+alwaysApply: true
+---
+
+# Campos de formulario accesibles
+
+Bug histórico: el label outlined de MUI queda **cruzado o recortado** a la mitad. Dos causas reales:
+
+1. Label shrink sin fondo `var(--card)` → el borde atraviesa el texto.
+2. `DialogTitle` + `DialogContent` → MUI fuerza `padding-top: 0` y `overflow-y: auto` **recorta** la mitad superior del label.
+
+## Obligatorio (theme)
+
+Mantener en `frontend/src/lib/muiTheme.ts`:
+
+- `MuiOutlinedInput.root.backgroundColor: var(--card)`
+- `MuiInputLabel.outlined["&.MuiInputLabel-shrink"].backgroundColor: var(--card)` (+ `paddingInline: 4px`)
+- `MuiDialogContent.root`: `paddingTop: 20px` **y** `.MuiDialogTitle-root + && { paddingTop: 20px }` (el `&&` gana a la regla de MUI)
+
+No quitar esos overrides. Hay tests en `muiTheme.test.ts` y `dialogFormFields.audit.test.ts`.
+
+## Al crear / editar un Dialog con TextField o Select
+
+```tsx
+<DialogTitle>…</DialogTitle>
+<DialogContent sx={{ "&&": { paddingTop: 20 } }}>
+  <TextField label="…" /* nunca solo placeholder */ />
+</DialogContent>
+```
+
+- Primer control con label flotante → **mínimo 20 px** arriba. Prohibido `pt: 0`, `pt: 1`, `paddingTop: 0`.
+- Excepción documentada: `ProductDetailDialog` (sin inputs; padding ajustado a imagen).
+- Si cambias el `bgcolor` del input, cambia **también** el del label shrink al mismo token.
+
+## Nombre accesible
+
+- `TextField` / `Select`: prop `label` (o `InputLabel` + `labelId` + `Select label`).
+- HTML nativo: `<label htmlFor>` o `aria-label` solo si no hay label visible viable.
+- `placeholder` **no** cuenta como nombre.
+
+## Checklist antes de dar por terminado
+
+- [ ] Vacío / focus / con valor / error (size normal y `small`)
+- [ ] En diálogo: label completo visible, no cortado por el borde superior
+- [ ] `npm test` (incluye audit de diálogos) + `npm run eslint` en `frontend/`
+
+## Antipatrones
+
+- ❌ `DialogContent sx={{ pt: 0 }}` o `pt: 1` con TextField/Select dentro
+- ❌ Confiar solo en `InputLabelProps={{ shrink: true }}` para “arreglar” el borde
+- ❌ Hex locales en label/input (`#fff9eb`) en vez de `var(--card)`
+- ❌ Inputs nativos de cantidad/precio sin `aria-label` / `<label>`

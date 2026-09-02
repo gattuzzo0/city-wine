@@ -1,0 +1,70 @@
+---
+description: Cliente HTTP del frontend hacia la API FastAPI (apiUrl helper, fetch tipado, errores HTTP, proxy de Vite y VITE_BACKEND_URL)
+alwaysApply: true
+---
+
+# Frontend: cliente API hacia FastAPI
+
+Cómo hablar con la API desde el navegador. Igual en local (proxy Vite) y en producción (`VITE_BACKEND_URL`) sin cambiar componentes.
+
+## Variable de entorno
+
+- **`VITE_BACKEND_URL`**: URL pública del backend FastAPI (sin barra final).
+- En **desarrollo local** se deja **vacía** y Vite hace proxy de `/api` → `http://127.0.0.1:8000`.
+- En **producción / Preview** debe existir en Vercel y requiere **nuevo build**.
+
+## Capas (no duplicar)
+
+| File | Role |
+|------|------|
+| `lib/apiUrl.ts` | `apiUrl()`, `backendHint()` |
+| `lib/apiClient.ts` | `ApiHttpError`, `apiFetch`, `handleApiJsonError`, `fetchJson` |
+| `lib/withAccessToken.ts` | get session token; on **401** `refreshSession` once and retry |
+| `lib/posApi.ts`, `catalogApi.ts`, `shopApi.ts` | domain fetches wrapping the helpers |
+
+Do **not** copy `apiUrl` / error parsers into each `*Api.ts`.
+
+```ts
+export function apiUrl(path: string): string {
+  const base = (import.meta.env.VITE_BACKEND_URL ?? "").replace(/\/$/, "");
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return base ? `${base}${p}` : p;
+}
+```
+
+Rutas siempre `/api/...`. Nunca `http://localhost:8000` en componentes.
+
+## Errores
+
+Una sola clase: **`ApiHttpError`** (`message` + `status`). No `PosApiHttpError`.
+
+- Red (`fetch` throws): `Error` + `backendHint()`.
+- No-OK: parse FastAPI `detail` (string o array Pydantic `msg`).
+- 502/503/504 y 500 genérico: mensaje + `backendHint()`.
+
+## Fetch de dominio
+
+```ts
+export async function fetchPosSales(accessToken: string): Promise<PosSalesPage> {
+  const res = await apiFetch("/api/pos/sales", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) await handleApiJsonError(res);
+  return (await res.json()) as PosSalesPage;
+}
+```
+
+POS mutaciones sensibles: pasar por `withAccessToken(op)` para el retry de 401.
+
+Reglas:
+
+- Token desde `useAuth()` / `withAccessToken` — no `localStorage`.
+- Tipos camelCase en `lib/<dominio>Types.ts`.
+- **No** axios / TanStack Query.
+
+## Antipatrones
+
+- ❌ Hardcodear `http://localhost:8000/api/...`
+- ❌ Segunda copia de `apiUrl` / `handleJsonError` en un módulo de dominio
+- ❌ `VITE_API_URL` (no está declarado ni leído)
+- ❌ Definir `VITE_BACKEND_URL` en runtime sin rebuild

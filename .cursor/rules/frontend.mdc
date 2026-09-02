@@ -1,0 +1,112 @@
+---
+description: Frontend — React 19, Vite 6, TypeScript, MUI, Tailwind v4, routing, data fetching
+globs: frontend/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend
+
+Stack: **React 19**, **Vite 6**, **TypeScript strict**, **React Router 7**, **MUI 6** + **Tailwind v4** (`@tailwindcss/vite`), **Lucide** icons. **No TanStack Query. No Zod. No `features/` folders.**
+
+## Entry and providers
+
+`main.tsx` → `App` only. Provider order (outside → in), matching `frontend/src/App.tsx`:
+
+```tsx
+<ThemeProvider theme={appTheme}>
+  <CssBaseline />
+  <AuthProvider>
+    <CatalogProvider>
+      <CartProvider>
+        <BrowserRouter>
+          <ScrollToTop />
+          <ErrorBoundary title="Algo salió mal">
+            <Routes>...</Routes>
+          </ErrorBoundary>
+          <ShopBottomNav />
+        </BrowserRouter>
+      </CartProvider>
+    </CatalogProvider>
+  </AuthProvider>
+</ThemeProvider>
+```
+
+`CartProvider` and `CatalogProvider` wrap the whole app (POS included), not only `ShopLayout`.
+
+## Folder structure
+
+```
+frontend/src/
+├── App.tsx
+├── pages/            # Home, Catalogo, Checkout*, Login, POS, Pedidos, EditarPagina, NotFound
+├── components/       # layout, shop, POS
+├── context/          # Auth, Cart, Catalog, Pos
+├── lib/              # apiUrl, apiClient, *Api.ts, supabase (auth only), muiTheme
+└── assets/           # brand, hero video, decorative PNGs — catalog product photos from API
+```
+
+Product catalog images come from API (`imageUrl` / `/api/catalog/files/...`), not as product-id PNG imports.
+
+## Routing
+
+- Nested layouts with `Outlet` (`ShopLayout` for public shop).
+- Protected routes: `RequirePosAccess` / `RequireAdminAccess` + `?next=` redirect to login.
+- `lazy()` + `Suspense` for `/pos`, `/pedidos`, `/pos/pedidos-entregados`.
+- Global `ErrorBoundary` around `Routes`; extra boundary inside each high-risk guarded route.
+- `Route path="*"` → `NotFound` (under shop layout).
+
+## Auth (client)
+
+- `lib/supabase.ts`: anon client singleton; `isSupabaseConfigured` guard; `clearPersistedAuthSession()`.
+- **Role, `canAccessPos`, `isAdmin` from `GET /api/me` only** — not `supabase.from('profiles')`.
+- `ready` flag before guards; `onAuthStateChange` only (no parallel `getSession()` init). Detail: `auth-session-method.mdc`.
+- Pass token via `session.access_token` / `withAccessToken()` — never read the JWT from `localStorage` by hand.
+
+## API client
+
+- `lib/apiUrl.ts`: `apiUrl()`, `backendHint()` — env **`VITE_BACKEND_URL`**.
+- `lib/apiClient.ts`: `ApiHttpError`, `apiFetch`, `handleApiJsonError`, `fetchJson`.
+- Domain modules (`posApi.ts`, `catalogApi.ts`, `shopApi.ts`) wrap `apiFetch` / `fetchJson`.
+- POS 401: `withAccessToken` / `PosContext` refresh session once and retry once.
+
+Dev: empty `VITE_BACKEND_URL` → Vite proxy `/api` → `http://127.0.0.1:8000`. Prod: `VITE_BACKEND_URL` required at build.
+
+## Data fetching
+
+No query library. Catalog loads in `CatalogContext`. POS sales/history via `posApi` from POS pages/context. Shop checkout via `shopApi`.
+
+## Styling
+
+- Tokens in `index.css` (`:root` + `@theme`); MUI theme `appTheme` in `lib/muiTheme.ts`.
+- Layout/spacing: Tailwind. Complex widgets: MUI.
+- Fonts via `index.html` Google Fonts link — not `@import` in CSS.
+
+## Forms
+
+- MUI `TextField` + HTML / Pydantic validation. No Formik, react-hook-form, or Zod.
+
+## Performance
+
+- Lazy routes for POS / pedidos.
+- Hero `<video>`: `autoPlay muted loop playsInline`. Honor `prefers-reduced-motion` on the catalog CTA animation.
+- No `manualChunks` in `vite.config.ts`.
+
+## PWA / icons
+
+`public/`: favicon set, `apple-touch-icon.png` (180×180), `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `site.webmanifest`. See `web-app-icons.mdc`.
+
+## Tooling
+
+- `vite.config.ts`: `strictPort: true`, proxy `/api`, `appType: "spa"`.
+- Build: `tsc -b && vite build`.
+- Scripts: `"lint": "eslint ."`, `"test": "vitest run"`. Root Husky calls `npm run eslint` which runs `npm run lint --prefix frontend`.
+- Declare `VITE_*` in `vite-env.d.ts`.
+
+## Anti-patterns
+
+- ❌ `REACT_APP_*`, `setupProxy.js`, `VITE_API_URL` (this repo uses `VITE_BACKEND_URL`)
+- ❌ `fetch` to Supabase PostgREST for business data
+- ❌ `process.env` — use `import.meta.env.VITE_*`
+- ❌ Export utilities from `*.tsx` (except `src/context/**`) — use `lib/`
+- ❌ Provider inside router if guards need auth context
+- ❌ Adding TanStack Query / Zod / `features/` without an explicit request

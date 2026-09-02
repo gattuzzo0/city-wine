@@ -1,0 +1,48 @@
+---
+description: Fotos de producto en tienda — grid uniforme, modal sin scroll, imagen completa
+globs: frontend/src/components/Product*.tsx,frontend/src/pages/Home.tsx,frontend/src/pages/Catalogo.tsx
+alwaysApply: false
+---
+
+# Imágenes de producto (tienda pública)
+
+Fuente única: **`frontend/src/components/ProductImage.tsx`**. No duplicar `<img>` con clases distintas en Home, Catálogo o el modal de detalle.
+
+## Dos variantes
+
+| Variant | Uso | Marco | `object-fit` |
+|---------|-----|-------|--------------|
+| `grid` (default) | Destacados, `/catalogo` | `aspect-[3/4]` móvil, `sm:aspect-[4/5]`; `rounded-xl` / `sm:rounded-2xl`; `bg-muted` | **`cover`** |
+| `dialog` | `ProductDetailDialog` | flex `flex-1`, `min-h-[9rem]`, `rounded-[var(--radius)]` | **`contain`** — **imagen completa**, sin recortar trípodes/arreglos altos |
+
+```tsx
+// Grid / catálogo
+<ProductImage src={p.image} className="transition group-hover:opacity-95" />
+
+// Modal
+<ProductImage src={product.image} variant="dialog" />
+```
+
+## Modal de detalle — sin barra vertical
+
+En **`ProductDetailDialog`** el modal **nunca** debe mostrar scroll vertical.
+
+- `Paper`: `maxHeight: 92dvh`, `display: flex`, `flexDirection: column`, **`overflow: hidden`**
+- **No** usar `scroll="paper"` en MUI `Dialog`
+- `DialogTitle` / `DialogActions`: `flexShrink: 0`
+- `DialogContent`: `flex: 1`, `minHeight: 0`, `overflow: hidden`, `display: flex`, `flexDirection: column`
+- Imagen: `ProductImage variant="dialog"` (ocupa espacio libre con `flex-1`)
+- Descripción: `line-clamp-2` + `shrink-0` para no empujar botones fuera de pantalla
+
+## Antipatrones
+
+- ❌ `<img className="w-full object-cover">` suelto en el modal (recorta o desborda)
+- ❌ `aspect-ratio` + altura fija baja + `object-cover` en dialog (corta arreglos verticales)
+- ❌ `scroll="paper"` o `DialogContent` con `overflow-y: auto` en detalle de producto
+- ❌ `object-contain` en grid (rompe mosaico uniforme); `object-cover` en dialog (oculta producto)
+
+## Otros contextos
+
+- Carrito / checkout éxito: miniaturas pequeñas (`h-16`/`h-20`) — no usar `ProductImage` dialog/grid.
+- Admin `EditarPagina`: preview propio (`aspect-[4/3]`); esta regla es solo **shop pública**.
+- Tarjetas clicables: clase **`shop-product-tile`** en Home/Catálogo; modal con **`disableRestoreFocus`** para no dejar anillo de foco al cerrar.

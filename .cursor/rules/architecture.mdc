@@ -1,0 +1,94 @@
+---
+description: System architecture — monorepo layout, module boundaries, dependency rules, data flow
+alwaysApply: true
+---
+
+# Architecture
+
+Layout for this stack: **React + Vite** SPA (`frontend/`), **FastAPI** (`backend/`), **Supabase** (Auth + Postgres **app schema**, lowercase product name). No microservices, GraphQL, or custom frameworks unless explicitly approved.
+
+## Monorepo layout
+
+```
+<repo>/
+├── frontend/                 # Vite React SPA
+├── backend/                  # FastAPI (Python 3.12)
+├── supabase/migrations/      # sole source of DB truth
+├── vercel.json               # frontend deploy when Vercel root = repo root
+├── package.json              # Husky + eslint → frontend lint
+└── README.md
+```
+
+Do not introduce `apps/web`, `apps/api`, or `packages/shared` in this repo. Layout is `frontend/` + `backend/` + `supabase/`.
+
+## System boundaries
+
+```text
+Browser
+  ├─ Supabase Auth SDK     → login, session, token refresh only
+  └─ HTTPS + Bearer JWT    → all business reads/writes
+
+API (service_role)         → Postgres (app schema), RPC, R2, Stripe
+Postgres (app schema)      → system of record
+R2                         → catalog image bytes; object key in DB; serve via API proxy
+```
+
+**Hard rules**
+
+- Frontend **never** uses service_role or reads business tables via anon key.
+- Frontend **never** sets catalog prices on write — server resolves from `catalog_products`. Exception: **venta libre** (`libre-varios`) may send `unitPrice`.
+- One catalog source of truth in Postgres (not static TS product arrays).
+- Schema changes only via `supabase/migrations/` — never “just run SQL in dashboard” without committing a migration file.
+
+## Layer model (API)
+
+```text
+server.py          FastAPI app, CORS, mount /api
+api/router.py      /health, /me, include domain routers
+api/*_routes.py    HTTP adapter + mapping (Pydantic in, camelCase out)
+api/deps.py        require_pos_staff, require_admin
+api/*.py           helpers (config, r2, fulfillment, checkout guards)
+```
+
+There is **no** `services/` / `repositories/` split. Keep logic in the domain route module or a sibling helper (`shop_fulfillment.py`, `shop_checkout_guards.py`) when the file is already large. Do not add a Node/Fastify layer.
+
+## Layer model (web)
+
+```text
+App.tsx            providers + routes
+pages/             route views
+components/        shared + POS UI
+context/           Auth, Cart, Catalog, Pos
+lib/               apiClient, supabase (auth only), domain *Api.ts
+```
+
+No `features/` folders, no `@/` path alias, no TanStack Query. Server data: `fetch` in `lib/*Api.ts` + React context / local state.
+
+## Deploy model
+
+- **Two Vercel projects**: frontend (repo root `vercel.json` → `frontend/dist`) and backend (root `backend/`).
+- Build-time env (`VITE_*`) on web — this repo uses **`VITE_BACKEND_URL`**, not `VITE_API_URL`.
+- Runtime env on API (`SUPABASE_*`, `R2_*`, `STRIPE_*`).
+
+## State ownership
+
+| Concern | Owner |
+|---------|--------|
+| Session / JWT | Supabase Auth (client) |
+| Role / permissions | API `GET /api/me` — not PostgREST from browser |
+| Catalog / cart | `CatalogContext`, `CartContext` |
+| POS ticket | `PosContext` |
+| UI ephemeral | `useState` |
+
+No Redux/Zustand/TanStack Query.
+
+## What we deliberately skip
+
+Microservices, GraphQL, event sourcing, Kubernetes, SSR/Next, BFF, CQRS, `packages/shared` Zod, Node API rewrite.
+
+## Anti-patterns
+
+- ❌ Business data fetched with anon key from browser
+- ❌ Client-sent `unitPrice` trusted for catalog products (venta libre only)
+- ❌ Multiple SQL schema files contradicting runtime (`backend/supabase_schema.sql` vs `supabase/migrations/`)
+- ❌ Pretending the API is Node/Fastify or the web lives under `apps/web`
