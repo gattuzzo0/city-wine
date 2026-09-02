@@ -6,7 +6,7 @@ gsap.registerPlugin(ScrollTrigger)
 export function bindScrollFx() {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
-  gsap.fromTo('.hero-copy, .scroll-label', { y: 0, autoAlpha: 1 }, {
+  gsap.fromTo('.hero-copy', { y: 0, autoAlpha: 1 }, {
     y: -90, autoAlpha: 0, ease: 'none',
     scrollTrigger: { trigger: '.hero', start: 'top top', end: '70% top', scrub: 1 },
   })
@@ -54,15 +54,6 @@ export function bindScrollFx() {
       yPercent: 14, scale: 1, ease: 'none',
       scrollTrigger: { trigger: img.parentElement, start: 'top bottom', end: 'bottom top', scrub: 1.2 },
     })
-  })
-
-  gsap.from('.featured > div', {
-    x: -80, autoAlpha: 0, duration: 1.2, ease: 'power3.out',
-    scrollTrigger: { trigger: '.featured', start: 'top 75%' },
-  })
-  gsap.fromTo('.featured img', { y: 100, rotate: -8 }, {
-    y: -50, rotate: 6, ease: 'none',
-    scrollTrigger: { trigger: '.featured', start: 'top bottom', end: 'bottom top', scrub: 1.3 },
   })
 
   ScrollTrigger.batch('.product', {
