@@ -1,0 +1,42 @@
+---
+description: Un solo gestor de paquetes (npm). Prohibido pnpm-lock.yaml — evita ERR_PNPM_OUTDATED_LOCKFILE en Vercel
+alwaysApply: true
+---
+
+# Package manager: npm only
+
+This repo is a **Next.js app at the root**. Local and Vercel install with **npm** + `package-lock.json`.
+
+Vercel picks the lockfile it finds: `pnpm-lock.yaml` → pnpm with `frozen-lockfile`. If `package.json` was changed with npm, CI fails:
+
+```
+ERR_PNPM_OUTDATED_LOCKFILE
+Cannot install with "frozen-lockfile" because pnpm-lock.yaml is not up to date
+```
+
+## Rules
+
+- Use **`npm install` / `npm i <pkg>`**. Never `pnpm` or `yarn`.
+- After any change to `package.json`, run `npm install` and **commit `package-lock.json` in the same commit**.
+- **Do not create or commit `pnpm-lock.yaml`**. If it appears, delete it.
+- Do not keep two lockfiles. The only lockfile is `package-lock.json`.
+
+## ❌ BAD
+
+```bash
+pnpm add gsap
+pnpm install
+```
+
+Leaving `pnpm-lock.yaml` next to `package-lock.json`.
+
+## ✅ GOOD
+
+```bash
+npm i gsap
+git add package.json package-lock.json
+```
+
+## Agent
+
+If you add/remove a dependency, run `npm install` and include the lockfile. Do not run pnpm “to sync Vercel”.
