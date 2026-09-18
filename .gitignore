@@ -7,7 +7,15 @@ __v0_jsx-dev-runtime.ts
 .vercel/
 
 # Environment variables
+.env
 .env*.local
+
+# Python
+backend/.venv
+backend/venv
+**/__pycache__/
+**/.pytest_cache/
+*.pyc
 
 # Common ignores
 node_modules

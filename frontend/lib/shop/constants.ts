@@ -1,0 +1,12 @@
+export const SHOP_TZ = 'America/Mexico_City'
+export const SHIPPING_PESOS = 180
+export const FREE_SHIPPING_OVER_PESOS = 2000
+export const MAX_LINE_QTY = 12
+export const PICKUP_CUTOFF_HOUR = 16
+export const DELIVERY_LEAD_BUSINESS_DAYS = 4
+export const CITYWINE_SCHEMA = 'citywine'
+export const CATALOG_BUCKET = 'citywine-catalog'
+export const CART_STORAGE_KEY = 'cw-cart-v1'
+export const AGE_STORAGE_KEY = 'cw-age-18'
+export const CHECKOUT_LIMIT_MAX = 10
+export const CHECKOUT_LIMIT_WINDOW_MS = 60_000
