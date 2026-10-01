@@ -1,5 +1,5 @@
 ---
-description: Despliegue Vercel — dos proyectos (frontend SPA Vite + backend Python), rewrites y CORS
+description: Despliegue Vercel — dos proyectos (web en frontend/ + backend Python), CORS
 alwaysApply: true
 ---
 
@@ -7,8 +7,8 @@ alwaysApply: true
 
 ## Dos proyectos
 
-- **Frontend** (Vite SPA): proyecto Vercel. Integración Git suele usar **raíz del monorepo** + `vercel.json` en la raíz (`installCommand` / `buildCommand` bajo `frontend/`, `outputDirectory` → `frontend/dist`, SPA rewrites). También existe `frontend/vercel.json` (solo rewrites) por si el Root Directory del dashboard es `frontend/`.
-- **Backend** (FastAPI): proyecto Vercel separado con root en `backend/`, entry `server.py`, runtime `@vercel/python`.
+- **Frontend**: proyecto Vercel con **Root Directory = `frontend`**. Next.js o Vite se detectan desde `frontend/package.json`. No uses `vercel.json` en la raíz del monorepo con `--prefix frontend`: Next.js no encontrará `.next/routes-manifest.json`. Detalle: `vercel-frontend-root-directory.mdc`.
+- **Backend** (FastAPI): proyecto Vercel separado con Root Directory `backend/`, entry `server.py`, runtime `@vercel/python`.
 
 ## Backend `vercel.json`
 

@@ -3,6 +3,56 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
 gsap.registerPlugin(ScrollTrigger)
 
+let cellarParallaxMediaWatch = false
+
+function isCoarseOrNarrow() {
+  return window.matchMedia('(max-width: 800px), (pointer: coarse)').matches
+}
+
+function watchCellarStillParallaxMedia() {
+  if (cellarParallaxMediaWatch) return
+  cellarParallaxMediaWatch = true
+  const rebind = () => bindCellarStillParallax()
+  window.matchMedia('(max-width: 800px), (pointer: coarse)').addEventListener('change', rebind)
+  window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', rebind)
+}
+
+function killCellarStillParallax() {
+  const imgs = gsap.utils.toArray<HTMLElement>('.cellar .product-image img')
+  imgs.forEach((img) => gsap.killTweensOf(img))
+  ScrollTrigger.getAll().forEach((st) => {
+    const trigger = st.trigger
+    if (trigger instanceof Element && trigger.closest('.cellar .product-image')) st.kill()
+  })
+}
+
+export function bindCellarStillParallax() {
+  watchCellarStillParallaxMedia()
+  killCellarStillParallax()
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || isCoarseOrNarrow()) {
+    gsap.set('.cellar .product-image img', { clearProps: 'transform' })
+    return
+  }
+  gsap.utils.toArray<HTMLElement>('.cellar .product-image img').forEach((img) => {
+    gsap.fromTo(
+      img,
+      { yPercent: -6, scale: 1.08 },
+      {
+        yPercent: 6,
+        scale: 1.08,
+        ease: 'none',
+        scrollTrigger: {
+          trigger: img.parentElement,
+          start: 'top bottom',
+          end: 'bottom top',
+          scrub: 1.2,
+        },
+      },
+    )
+  })
+  ScrollTrigger.refresh()
+}
+
 export function bindScrollFx() {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
@@ -55,7 +105,7 @@ export function bindScrollFx() {
   })
 
   gsap.utils.toArray<HTMLElement>('.split-head img').forEach((img) => {
-    if (window.matchMedia('(max-width: 800px), (pointer: coarse)').matches) return
+    if (isCoarseOrNarrow()) return
     gsap.fromTo(img, { scale: 1.22, yPercent: -8 }, {
       scale: 1, yPercent: 8, ease: 'none',
       scrollTrigger: { trigger: img, start: 'top bottom', end: 'bottom top', scrub: 1.2 },
@@ -77,4 +127,6 @@ export function bindScrollFx() {
     x: 90, autoAlpha: 0, duration: 1.3, ease: 'power3.out',
     scrollTrigger: { trigger: '.about', start: 'top 75%' },
   })
+
+  bindCellarStillParallax()
 }

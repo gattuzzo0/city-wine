@@ -13,9 +13,9 @@ Al crear una app full-stack nueva (p. ej. "app para vender pizzas"), usa este la
 ├── backend/           # API FastAPI
 ├── supabase/migrations/
 ├── README.md
-├── package.json       # Husky + `eslint` → `npm run lint --prefix frontend`
-├── vercel.json        # Frontend deploy (root = monorepo)
+├── package.json       # scripts que delegan a frontend/ (`npm run build --prefix frontend` en local)
 └── .gitignore
+# Deploy web: Root Directory Vercel = frontend/ — no vercel.json Next.js en la raíz del repo.
 ```
 
 ## Convenciones

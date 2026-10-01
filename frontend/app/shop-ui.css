@@ -80,6 +80,10 @@ html:not(.intro-lock) body{
   height:100%;
   object-fit:cover;
   display:block;
+  transform-origin:center center;
+}
+@media (min-width:801px) and (pointer:fine){
+  .cellar .product-image img{will-change:transform}
 }
 .cellar .product.skel{
   min-height:0;

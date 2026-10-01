@@ -1,0 +1,54 @@
+---
+description: Si el repo tiene frontend/, el proyecto Vercel del web usa Root Directory = frontend. Next.js busca .next ahí, no en la raíz del monorepo.
+globs: frontend/**
+alwaysApply: true
+---
+
+# Vercel: Root Directory = `frontend/`
+
+Aplica **solo** si existe `frontend/` en la raíz del repo. Si no hay esa carpeta, ignora esta regla.
+
+El **cwd del build** de Vercel es Root Directory. Next.js escribe y lee `.next/routes-manifest.json` **relativo a ese cwd**.
+
+## Obligatorio
+
+- Proyecto Vercel del **web**: Root Directory = `frontend` (dashboard → Settings → Build and Deployment).
+- Framework: Next.js si `frontend/package.json` tiene `next`; Vite si tiene `vite`.
+- Install / Build / Output: **defaults del framework**. No overrides.
+- `vercel.json` del web, si hace falta, vive en **`frontend/vercel.json`**.
+- API FastAPI: proyecto **aparte**, Root Directory = `backend`.
+
+## Prohibido (rompe Next.js)
+
+No pongas en la **raíz del monorepo** un `vercel.json` con `framework: nextjs` y:
+
+```json
+{
+  "installCommand": "npm install --prefix frontend",
+  "buildCommand": "npm run build --prefix frontend"
+}
+```
+
+Eso construye en `frontend/.next` y Vercel busca `/vercel/path0/.next/routes-manifest.json`.
+
+Tampoco: Output Directory `frontend/.next`, `npm run build --prefix frontend` **con** Root Directory ya en `frontend/` (doble ruta), ni servir Next como estático.
+
+## Síntoma
+
+```
+Error: The file "/vercel/path0/.next/routes-manifest.json" couldn't be found.
+```
+
+`next build` en el log (ƒ middleware, ○ Static) y luego este error → Root Directory mal, no un build fallido.
+
+## Arreglo
+
+1. Root Directory → `frontend`.
+2. Quitar overrides de Install/Build/Output y el `vercel.json` de la raíz que hacía `--prefix frontend`.
+3. Redeploy (sin cache de build si el error persiste).
+
+CLI:
+
+```bash
+npx vercel api /v9/projects/<nombre> -X PATCH -F rootDirectory=frontend
+```

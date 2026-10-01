@@ -11,6 +11,7 @@ import { CartDrawer } from '@/components/shop/CartDrawer'
 import { CartProvider, useCart } from '@/components/shop/CartProvider'
 import { CatalogProvider, useCatalog } from '@/components/shop/CatalogProvider'
 import { WhatsappFab } from '@/components/shop/WhatsappFab'
+import { bindCellarStillParallax } from '@/components/scroll-fx'
 import { displayDetail, displayName } from '@/lib/shop/mapping'
 
 const logoUrl = 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-7F74eb8acoX9X3biRjJWZUX4eBqfbg.png'
@@ -290,6 +291,12 @@ function Cellar() {
           locale: { region: w.region, type: w.type, notes: w.notes },
         }))
   const list = filter === 'all' ? listSource : listSource.filter((w) => w.locale.type === filter)
+  const stillKey = list.map((w) => w.id).join()
+  useEffect(() => {
+    if (status === 'loading') return
+    const frame = requestAnimationFrame(() => bindCellarStillParallax())
+    return () => cancelAnimationFrame(frame)
+  }, [status, stillKey])
   return (
     <section id="cellar" className="section cellar">
       <div className="section-head">
