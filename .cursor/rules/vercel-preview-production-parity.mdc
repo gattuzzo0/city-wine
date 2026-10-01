@@ -15,8 +15,8 @@ Aplica a apps full-stack desplegadas en **Vercel** (frontend SPA + API aparte), 
 
 ## Git vs CLI y raíz del repo
 
-- `npx vercel --prod` desde `frontend/` usa `frontend/` como raíz del proyecto; el integración Git usa la **Root Directory** configurada en el dashboard.
-- Si la Root Directory del frontend es la **raíz del monorepo**, hace falta `vercel.json` **en la raíz del repo** con `installCommand` / `buildCommand` bajo `frontend/` y `outputDirectory` → `frontend/dist` (y rewrites SPA). Sin eso el deploy automático puede construir el `package.json` equivocado o servir salida vacía.
+- `npx vercel --prod` desde `frontend/` usa `frontend/` como raíz del proyecto; la integración Git usa la **Root Directory** del dashboard, que debe ser **`frontend`** si existe esa carpeta (ver `vercel-frontend-root-directory.mdc`).
+- No compensar un Root Directory en la raíz del monorepo con `buildCommand` `--prefix frontend`: Next.js busca `.next` en el cwd de Vercel y falla con `routes-manifest.json` missing.
 - Tras cambiar variables de entorno en Vercel, hace falta **nuevo build** (redeploy o commit); Vite/React no inyectan `import.meta.env` / `process.env` en runtime.
 
 ## Variables de entorno (frontend)
